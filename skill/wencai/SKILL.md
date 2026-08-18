@@ -72,6 +72,9 @@ user_id = re.search(r'userid=([^;]+)', cookie).group(1)  # chat()需要user_id�
 │   └─ 是 → 优先使用 get()（支持loop翻页拿到全部结果，更稳定）
 │            若get()对某些新指标识别不佳，或需要交叉验证，再尝试 screener()
 │            （screener是问财新版选股agent，指标可能更新更快，但不支持分页，受perpage限制）
+│            正常情况下问句直接用自然语言表达即可，不需要先查参考资料；
+│            仅当遇到冷门/生僻指标、拿不准问财是否支持、或不确定官方标准措辞时，
+│            可查阅 reference/xuangu_conditions.json（问财条件选股页面的完整分类清单）作为参考
 │
 ├─ 是否在查"某一个具体标的（股票/基金/指数）的行情、财务、简介等数据"？
 │   （例如："贵州茅台"、"最近一年收益率最高的基金经理"）
@@ -118,4 +121,4 @@ res = pywencai.search('工商银行', cookie=cookie)
 2. **低频调用**：短时间高频请求会触发风控返回`403 Access Denied`，同一账号/cookie也会被限制，请求间隔建议2秒以上。
 3. `query_type`参数（`get`/`screener`通用）用于指定非A股品类，取值见项目`README.md`（stock/zhishu/fund/fundmanager/fundcompany/hkstock/hkzhishu/usstock/uszhishu/threeboard/conbond/insurance/futures/lccp/foreign_exchange/macro）。
 4. `get()`返回类型不固定（可能是`DataFrame`或`dict`），调用后需要判断类型再处理；如需固定返回`DataFrame`或`None`，可传`no_detail=True`。
-5. 条件选股中支持的具体指标分类（技术面/行情面/基本面/财务面/阶段表现/特色数据）见`pywencai/xuangu_conditions.json`。
+5. 条件选股支持的具体指标分类（技术面/行情面/基本面/财务面/阶段表现/特色数据，共66个分类）见`reference/xuangu_conditions.json`（相对本文件所在目录，即`$PYWENCAI_ROOT/skill/wencai/reference/xuangu_conditions.json`）。这是**可选参考资料**，不是选股的前置依赖——多数问句直接用自然语言表达即可被问财正确解析，仅在拿不准某个冷门指标问财是否支持时才查阅。
