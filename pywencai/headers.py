@@ -12,16 +12,17 @@ def get_token():
     # context = execjs.compile(jscontent)
     return result.stdout.decode().strip() # context.call("v")
 
-def headers(cookie=None, user_agent=None):
+def headers(cookie=None, user_agent=None, referer='https://www.iwencai.com/'):
 
     if user_agent is None:
         from fake_useragent import UserAgent
         ua = UserAgent()
         user_agent = ua.random
-        
+
 
     return {
         'hexin-v': get_token(),
         'User-Agent': user_agent,
-        'cookie': cookie
+        'cookie': cookie,
+        'Referer': referer
     }

@@ -8,7 +8,7 @@ from .headers import headers
 def get_url(url):
     res = rq.request(
         method='GET',
-        url=f'http://www.iwencai.com{url}',
+        url=f'https://www.iwencai.com{url}',
         headers=headers()
     )
     result = json.loads(res.text)
@@ -177,15 +177,17 @@ def convert(res):
     content = _.get(result, 'data.answer.0.txt.0.content')
     if type(content) == str:
         content = json.loads(content)
-    components = content['components'] 
+    components = content['components']
     params = {}
     url = None
-    
-    if (len(components) == 1 and _.get(components[0], 'show_type') == 'xuangu_tableV1'):
-        url = _.get(components[0], 'config.other_info.footer_info.url')
+
+    xuangu_comp = _.find(components, lambda c: c.get('show_type') == 'xuangu_tableV1')
+
+    if xuangu_comp is not None:
+        url = _.get(xuangu_comp, 'config.other_info.footer_info.url')
         params = {
-            'data': xuangu_tableV1_handler(components[0], components),
-            'row_count': _.get(components[0], 'data.meta.extra.row_count'),
+            'data': xuangu_tableV1_handler(xuangu_comp, components),
+            'row_count': _.get(xuangu_comp, 'data.meta.extra.row_count'),
             'url': url,
             'url_params': parse_url_params(url)
         }

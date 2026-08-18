@@ -43,6 +43,17 @@ print(res)
 
 # API
 
+pywencai目前支持4种方法，分别对应问财不同的功能入口：
+
+| 方法 | 对应问财功能 | 底层接口 | 返回值 |
+|-|-|-|-|
+| `get` | 条件选股 / 个股问答（旧版） | `customized/chart/get-robot-data` + `gateway/urp/v7/landing/getDataList` | `DataFrame` 或 `dict` |
+| `screener` | AI选股（新版，即问财官网的"选股"入口） | `gateway/aime/stream-query`（选股agent） | `DataFrame` |
+| `chat` | AI对话（问财官网的"对话"入口，问知识、规则等） | `gateway/aime/stream-query`（对话agent） | 字符串（完整回答文本） |
+| `search` | 综合搜索（新闻/网页/公告/研报/互动易） | `gateway/mobilesearch/comprehensive/search` | `DataFrame` |
+
+> `get`和`screener`都能做条件选股，是问财新旧两套并行的技术实现，功能上大体等价，`screener`是新接口，覆盖的指标和数据可能更新更及时，但返回条数上限固定（见下文`perpage`说明），`get`支持`loop`翻页拿到全部结果。日常选股优先用`get`（更稳定、支持分页），`screener`可用于验证或获取新接口独有的字段。
+
 ## get(**kwargs)
 
 根据问财语句查询结果
@@ -85,17 +96,22 @@ print(res)
 
 | 取值 | 含义 |
 |-|-|
-| stock | 股票 |
-| zhishu | 指数 |
-| fund | 基金 |
+| stock | A股 |
+| zhishu | A股指数 |
+| fund | 基金产品（含场内ETF） |
+| fundmanager | 基金经理 |
+| fundcompany | 基金公司 |
 | hkstock | 港股 |
+| hkzhishu | 港股指数 |
 | usstock | 美股 |
+| uszhishu | 美股指数 |
 | threeboard | 新三板 |
 | conbond | 可转债 |
 | insurance | 保险 |
 | futures | 期货 |
 | lccp | 理财 |
 | foreign_exchange | 外汇 |
+| macro | 宏观 |
 
 #### retry
 
@@ -156,3 +172,102 @@ pywencai.get(query='昨日涨幅', sort_order='asc', loop=True, log=True, reques
 当查询的是列表时，该方法返回一个`pandas`的`Dataframe`
 
 当查询的是详情时，该方法返回一个字典，字典中可能包含若干个文本和`Dataframe`
+
+## screener(question, **kwargs)
+
+AI选股（问财官网"选股"入口对应的新接口），根据自然语言条件返回选股结果
+
+```python
+import pywencai
+
+res = pywencai.screener('macd金叉，换手率大于5%', cookie='xxx')
+print(res)
+```
+
+### 参数
+
+#### question
+
+必填，选股问句
+
+#### query_type
+
+非必填，默认为`stock`，取值同`get`方法的`query_type`
+
+#### perpage
+
+非必填，默认为50，单次返回的最大条数（该接口不支持分页，若结果条数超过`perpage`只会返回其中一部分）
+
+#### retry / sleep / log / cookie / user_agent / request_params
+
+含义同`get`方法对应参数
+
+### 返回值
+
+返回一个`pandas`的`Dataframe`
+
+## chat(question, **kwargs)
+
+AI对话（问财官网"对话"入口），用于问知识、规则等不需要返回股票列表的问题，返回完整的回答文本
+
+```python
+import pywencai
+
+answer = pywencai.chat('股性评分的计算规则是什么', cookie='xxx', user_id='你的userid')
+print(answer)
+```
+
+### 参数
+
+#### question
+
+必填，对话问句
+
+#### user_id
+
+非必填，默认为空字符串，建议传入cookie中的`userid`字段值
+
+#### deep_research
+
+非必填，默认为`False`，是否开启深度研究模式
+
+#### retry / sleep / log / cookie / user_agent / request_params
+
+含义同`get`方法对应参数
+
+### 返回值
+
+返回一个字符串，为AI对话的完整回答文本（内容为Markdown格式）
+
+## search(query, **kwargs)
+
+综合搜索（问财官网"搜索"入口），聚合新闻、网页、公告、研报、互动易等多渠道结果
+
+```python
+import pywencai
+
+res = pywencai.search('工商银行', cookie='xxx')
+print(res)
+```
+
+### 参数
+
+#### query
+
+必填，搜索关键词
+
+#### channels
+
+非必填，默认为`['news_filter', 'web', 'announcement', 'report', 'interact']`，指定搜索渠道
+
+#### offset / size
+
+非必填，分页参数，默认`offset=0`，`size=20`
+
+#### retry / sleep / log / cookie / user_agent / request_params
+
+含义同`get`方法对应参数
+
+### 返回值
+
+返回一个`pandas`的`Dataframe`，包含`channel`（结果所属渠道）、`title`、`summary`、`url`等字段

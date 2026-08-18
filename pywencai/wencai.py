@@ -1,6 +1,8 @@
 import json
 from typing import List
 import math
+import uuid
+from urllib.parse import quote
 
 import requests as rq
 import pandas as pd
@@ -60,7 +62,7 @@ def get_robot_data(**kwargs):
     def do():
         res = rq.request(
             method='POST',
-            url='http://www.iwencai.com/customized/chart/get-robot-data',
+            url='https://www.iwencai.com/customized/chart/get-robot-data',
             json=data,
             headers=headers(cookie, user_agent),
             **request_params
@@ -105,7 +107,7 @@ def get_page(url_params, **kwargs):
             'page': 1,
             **kwargs
         }
-        target_url = 'http://www.iwencai.com/gateway/urp/v7/landing/getDataList'
+        target_url = 'https://www.iwencai.com/gateway/urp/v7/landing/getDataList'
         if pro:
             target_url = f'{target_url}?iwcpro=1'
         path = 'answer.components.0.data.datas'
@@ -121,7 +123,7 @@ def get_page(url_params, **kwargs):
             'question': find,
             **kwargs
         }
-        target_url = 'http://www.iwencai.com/unifiedwap/unified-wap/v2/stock-pick/find'
+        target_url = 'https://www.iwencai.com/unifiedwap/unified-wap/v2/stock-pick/find'
         path = 'data.data.datas'
     
     log and logger.info(f'第{data.get("page")}页开始')
@@ -185,7 +187,7 @@ def get(loop=False, **kwargs):
     data = params.get('data')
     url_params = params.get('url_params')
     condition = _.get(data, 'condition')
-    
+
     if condition is not None:
         kwargs = {**kwargs, **data}
         find = kwargs.get('find', None)
@@ -200,3 +202,201 @@ def get(loop=False, **kwargs):
             return data
         else:
             return None
+
+
+def parse_stream_line(line):
+    '''解析一行SSE数据'''
+    if not line or not line.startswith('data:'):
+        return None
+    try:
+        return json.loads(line[len('data:'):])
+    except json.JSONDecodeError:
+        return None
+
+
+def chat(question, **kwargs):
+    '''AI对话，返回完整回答文本'''
+    retry = kwargs.get('retry', 10)
+    sleep = kwargs.get('sleep', 0)
+    log = kwargs.get('log', False)
+    cookie = kwargs.get('cookie', None)
+    user_agent = kwargs.get('user_agent', None)
+    user_id = kwargs.get('user_id', '')
+    deep_research = kwargs.get('deep_research', False)
+    request_params = kwargs.get('request_params', {})
+
+    data = {
+        'version': '3.4.1',
+        'session_id': uuid.uuid4().hex,
+        'user_id': user_id,
+        'source': 'Ths_iwencai_Xuangu',
+        'input_type': 'click',
+        'question': question,
+        'deviceType': 'browser',
+        'add_info': {
+            'merge_repeat': True,
+            'async_generate_data': True,
+            'show_searching': True,
+            'urp': {'is_lowcode': 1, 'component_version': '1.1.4'}
+        },
+        'entity_info': {},
+        'events': [
+            {'event_name': 'auto_agent', 'event_type': 'user_input'},
+            {'event_name': 'ab_test', 'event_type': 'front_trigger', 'content': {'deep_research': 1 if deep_research else 0}}
+        ]
+    }
+
+    log and logger.info(f'AI对话开始')
+
+    def do():
+        res = rq.request(
+            method='POST',
+            url='https://www.iwencai.com/gateway/aime/stream-query',
+            json=data,
+            headers={
+                **headers(cookie, user_agent, referer='https://www.iwencai.com/chat'),
+                'Content-Type': 'application/json',
+                'accept': 'text/event-stream',
+                'X-Source': 'Ths_iwencai_Xuangu'
+            },
+            stream=True,
+            **request_params
+        )
+        answer_parts = []
+        for line in res.iter_lines(decode_unicode=True):
+            event = parse_stream_line(line)
+            if event is None:
+                continue
+            if event.get('answer_path') == 'other/openAnswer':
+                answer_parts.append(_.get(event, 'section.text_answer', ''))
+        answer = ''.join(answer_parts)
+        if answer == '':
+            raise Exception('answer is empty!')
+        log and logger.info(f'AI对话成功')
+        return answer
+
+    result = while_do(do, retry, sleep, log)
+
+    if result is None:
+        log and logger.info(f'AI对话失败')
+
+    return result
+
+
+def search(query, **kwargs):
+    '''综合搜索，返回新闻/网页/公告/研报/互动易等多渠道结果列表'''
+    retry = kwargs.get('retry', 10)
+    sleep = kwargs.get('sleep', 0)
+    log = kwargs.get('log', False)
+    cookie = kwargs.get('cookie', None)
+    user_agent = kwargs.get('user_agent', None)
+    offset = kwargs.get('offset', 0)
+    size = kwargs.get('size', 20)
+    channels = kwargs.get('channels', ['news_filter', 'web', 'announcement', 'report', 'interact'])
+    request_params = kwargs.get('request_params', {})
+
+    data = {
+        'offset': offset,
+        'size': size,
+        'app_id': 'wencai_pc',
+        'query': query,
+        'channels': channels,
+        'qid': uuid.uuid4().hex,
+        'scroll_mode': 'web',
+        'platform': 'pc',
+        'slots': []
+    }
+
+    log and logger.info(f'综合搜索开始')
+
+    def do():
+        res = rq.request(
+            method='POST',
+            url='https://www.iwencai.com/gateway/mobilesearch/comprehensive/search',
+            json=data,
+            headers={
+                **headers(cookie, user_agent, referer=f'https://www.iwencai.com/search/result?w={quote(query)}'),
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, text/plain, */*'
+            },
+            **request_params
+        )
+        result_do = json.loads(res.text)
+        data_list = _.get(result_do, 'data')
+        if not data_list:
+            raise Exception('data is empty!')
+        log and logger.info(f'综合搜索成功')
+        return pd.DataFrame.from_dict(data_list)
+
+    result = while_do(do, retry, sleep, log)
+
+    if result is None:
+        log and logger.info(f'综合搜索失败')
+
+    return result
+
+
+def screener(question, **kwargs):
+    '''AI选股（新版条件选股agent），返回选股结果DataFrame'''
+    retry = kwargs.get('retry', 10)
+    sleep = kwargs.get('sleep', 0)
+    log = kwargs.get('log', False)
+    cookie = kwargs.get('cookie', None)
+    user_agent = kwargs.get('user_agent', None)
+    query_type = kwargs.get('query_type', 'stock')
+    perpage = kwargs.get('perpage', 50)
+    request_params = kwargs.get('request_params', {})
+
+    data = {
+        'question': question,
+        'default_fallback': False,
+        'input_type': 'click',
+        'entity_info': {'device_type': 'pc', 'comefrom': None},
+        'source': 'ths_iwencai_pc_xuangu',
+        'dialog_model': 'CUSTOMER_AGENT',
+        'version': '3.4.1',
+        'agent_tools': [{'tool_id': 'FinQuery', 'tool_param': {'domain': query_type, 'perpage': perpage}}],
+        'events': [{'event_type': 'user_input', 'event_name': 'normal_agent', 'content': {}}],
+        'add_info': {},
+        'agent_id': 'MaSzyUwyyl',
+        'agent_name': ''
+    }
+
+    log and logger.info(f'AI选股开始')
+
+    def do():
+        res = rq.request(
+            method='POST',
+            url='https://www.iwencai.com/gateway/aime/stream-query',
+            json=data,
+            headers={
+                **headers(cookie, user_agent, referer=f'https://www.iwencai.com/screener/result?w={quote(question)}&querytype={query_type}'),
+                'Content-Type': 'application/json',
+                'accept': 'text/event-stream',
+                'X-Source': 'ths_iwencai_pc_xuangu'
+            },
+            stream=True,
+            **request_params
+        )
+        datas = None
+        for line in res.iter_lines(decode_unicode=True):
+            event = parse_stream_line(line)
+            if event is None:
+                continue
+            if event.get('answer_path') != 'other/openAnswer':
+                continue
+            components = _.get(event, 'section.result_page.components', [])
+            comp = _.find(components, lambda c: _.get(c, 'data.datas') is not None)
+            if comp is not None:
+                datas = _.get(comp, 'data.datas')
+        if not datas:
+            raise Exception('datas is empty!')
+        log and logger.info(f'AI选股成功')
+        return pd.DataFrame.from_dict(datas)
+
+    result = while_do(do, retry, sleep, log)
+
+    if result is None:
+        log and logger.info(f'AI选股失败')
+
+    return result
