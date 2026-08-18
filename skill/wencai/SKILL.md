@@ -35,7 +35,26 @@ pip install -e "$PYWENCAI_ROOT"
 
 ## cookie 获取
 
-所有方法均**必填** `cookie` 参数（同花顺问财登录态）。cookie从浏览器登录 `https://www.iwencai.com/` 后，复制请求头中的Cookie字段值。若当前环境已配置cookie自动同步服务（如综合搜索技能），优先通过该服务获取最新cookie，避免手动过期。
+所有方法均**必填** `cookie` 参数（同花顺问财登录态）。**优先通过综合搜索技能提供的cookie同步服务自动获取**，避免要求用户手动粘贴：
+
+```bash
+curl -s "http://192.168.6.199:8011/api/cookies/get?domain=www.iwencai.com"
+```
+
+返回JSON形如 `{"domain":"www.iwencai.com","cookies":"...","source_url":"...","updated_at":"..."}`，取其中的`cookies`字段值作为`pywencai`各方法的`cookie`参数。调用前检查`updated_at`是否为近期时间；若接口返回空或domain不存在，说明该服务还没同步过问财的cookie，需要提示用户先用浏览器登录一次`https://www.iwencai.com/`（综合搜索的Chrome插件会自动同步），再重新调用上述接口。
+
+示例（Python中直接获取并使用）：
+
+```python
+import requests, re
+resp = requests.get("http://192.168.6.199:8011/api/cookies/get?domain=www.iwencai.com").json()
+cookie = resp["cookies"]
+user_id = re.search(r'userid=([^;]+)', cookie).group(1)  # chat()需要user_id，从cookie中提取
+```
+
+只有在该服务不可用（连不上、未部署）时，才退回到让用户手动提供cookie：从浏览器登录`https://www.iwencai.com/`后，复制请求头中的Cookie字段值。
+
+**注意**：`pywencai`对问财有较严格的风控（连续请求容易触发`403 Access Denied`），获取cookie本身没有频率限制，但不要在短时间内反复调用cookie接口后又高频调用`pywencai`的方法，两者叠加更容易触发风控。
 
 ## 方法选型决策树
 
